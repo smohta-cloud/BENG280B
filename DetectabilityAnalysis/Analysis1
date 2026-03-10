@@ -1,0 +1,184 @@
+
+
+% https://github.com/CRossSchmidtlein/PETSTEP - to download petstep
+%https://www.cancerimagingarchive.net/collection/tcga-prad/ - to download
+%the prostate data
+%% ============================================================
+% PET/MR Sensitivity Limit Simulation
+% Physics-Limited Detectability Study
+% =============================================================
+%% ============================================================
+% PET/MR Sensitivity Limit Simulation
+% Manual Prostate Mask + Full Detectability Analysis
+% =============================================================
+clc; clear; close all;
+%% =========================
+% USER INPUT
+%% =========================
+dicomFolder = "/Users/deeptabharadwaj/Downloads/280b/manifest-LKlXeErz8879128910887416605/TCGA-PRAD/TCGA-EJ-5495/01-30-1992-NA-MRI PELVIS-73360/4.000000-T2 AXIAL-78303";
+voxel_size_mm = 1;
+counts = 5e3;
+%num_realizations = 200; %for lesion comb 1
+num_realizations = 400;
+% lesion_sizes_mm = 2:2:8; %lesion comb 1
+% contrasts = 2:2:8; %lesion comb 1
+lesion_sizes_mm = 1:0.5:24;      % 1 mm to 12 mm in 0.5 mm steps
+contrasts = 1.5:0.5:20; 
+fwhm_mm = 5;    % PET system resolution
+sigma = fwhm_mm/(2.355*voxel_size_mm);
+blur_kernel = fspecial('gaussian',25,sigma);
+rng(1); % reproducibility
+%% =========================
+% LOAD MRI VOLUME
+%% =========================
+disp('Loading MRI...');
+files = dir(fullfile(dicomFolder,'*.dcm'));
+fileNames = fullfile({files.folder},{files.name});
+% Sort slices using ImagePositionPatient
+slicePos = zeros(length(fileNames),1);
+for i = 1:length(fileNames)
+   info = dicominfo(fileNames{i});
+   slicePos(i) = info.ImagePositionPatient(3);
+end
+[~, idx] = sort(slicePos);
+fileNames = fileNames(idx);
+info = dicominfo(fileNames{1});
+mri_vol = zeros(info.Rows, info.Columns, length(fileNames));
+for i = 1:length(fileNames)
+   mri_vol(:,:,i) = dicomread(fileNames{i});
+end
+slice_idx = round(size(mri_vol,3)/2);
+mri_slice = mat2gray(mri_vol(:,:,slice_idx));
+figure;
+imshow(mri_slice,[]);
+title('MRI Slice');
+%% =========================
+% MANUAL PROSTATE MASK
+%% =========================
+accepted = false;
+while ~accepted
+   figure;
+   imshow(mri_slice,[]);
+   title('Draw prostate boundary (double click to finish)');
+   h = drawpolygon('Color','r','LineWidth',2);
+   wait(h);
+   mask = createMask(h);
+   figure;
+   imshow(mri_slice,[]); hold on;
+   contour(mask,'r','LineWidth',2);
+   title('Accept this mask?');
+   choice = questdlg('Is the mask correct?', ...
+       'Mask Confirmation','Yes','No','Yes');
+   if strcmp(choice,'Yes')
+       accepted = true;
+   end
+end
+save('prostate_mask.mat','mask');
+%% =========================
+% BASELINE PET IMAGE
+%% =========================
+baseline_pet = zeros(size(mask));
+baseline_pet(mask) = 1;
+%% =========================
+% PREALLOCATE RESULTS
+%% =========================
+AUC_matrix = zeros(length(lesion_sizes_mm), length(contrasts));
+dprime_matrix = zeros(size(AUC_matrix));
+[X,Y] = meshgrid(1:size(mask,2),1:size(mask,1));
+%% =========================
+% MAIN SIMULATION LOOP
+%% =========================
+disp('Running detectability simulation...');
+AUC_std = zeros(size(AUC_matrix));   % NEW: uncertainty storage
+for s = 1:length(lesion_sizes_mm)
+   for c = 1:length(contrasts)
+       lesion_radius_pix = (lesion_sizes_mm(s)/2)/voxel_size_mm;
+       responses_signal = zeros(num_realizations,1);
+       responses_noise  = zeros(num_realizations,1);
+       for r = 1:num_realizations
+           valid_pixels = find(mask);
+           rand_idx = valid_pixels(randi(length(valid_pixels)));
+           [cy,cx] = ind2sub(size(mask), rand_idx);
+           lesion = ((X-cx).^2 + (Y-cy).^2) ...
+               <= lesion_radius_pix^2;
+           signal_image = baseline_pet;
+           signal_image(lesion) = contrasts(c);
+           signal_blur = imfilter(signal_image, ...
+               blur_kernel,'replicate');
+           noisy_signal = poissrnd(signal_blur*counts)/counts;
+           noisy_noise  = poissrnd(baseline_pet*counts)/counts;
+           template = (signal_blur - baseline_pet).*mask;
+           template = template / norm(template(:));
+           responses_signal(r) = sum(template(:).* ...
+               (noisy_signal(:).*mask(:)));
+           responses_noise(r)  = sum(template(:).* ...
+               (noisy_noise(:).*mask(:)));
+       end
+       %% Compute d-prime
+       mu_s = mean(responses_signal);
+       mu_n = mean(responses_noise);
+       var_s = var(responses_signal);
+       var_n = var(responses_noise);
+       dprime_matrix(s,c) = (mu_s - mu_n) / ...
+           sqrt(0.5*(var_s + var_n));
+       %% =========================
+       % Bootstrap AUC
+       %% =========================
+       nboot = 200;
+       auc_boot = zeros(nboot,1);
+       for b = 1:nboot
+           idx_s = randi(num_realizations,num_realizations,1);
+           idx_n = randi(num_realizations,num_realizations,1);
+           rs = responses_signal(idx_s);
+           rn = responses_noise(idx_n);
+           thresholds = linspace(min([rs;rn]), ...
+                                 max([rs;rn]),100);
+           TPR = arrayfun(@(t) mean(rs>t), thresholds);
+           FPR = arrayfun(@(t) mean(rn>t), thresholds);
+           [FPR, idx2] = sort(FPR);
+           TPR = TPR(idx2);
+           auc_boot(b) = trapz(FPR,TPR);
+       end
+       AUC_matrix(s,c) = mean(auc_boot);
+       AUC_std(s,c)    = std(auc_boot);
+   end
+end
+figure;
+imagesc(contrasts, lesion_sizes_mm, AUC_std);
+colorbar;
+xlabel('SUV Contrast Ratio');
+ylabel('Lesion Size (mm)');
+title('AUC Uncertainty (Bootstrap Std)');
+set(gca,'YDir','normal');
+figure;
+surf(contrasts, lesion_sizes_mm, AUC_matrix);
+xlabel('Contrast');
+ylabel('Lesion Size (mm)');
+zlabel('AUC');
+title('Full Detectability Surface');
+shading interp;
+colorbar;
+%% =========================
+% Logistic Regression
+%% =========================
+[S_grid, C_grid] = meshgrid(lesion_sizes_mm, contrasts);
+S_vec = S_grid(:);
+C_vec = C_grid(:);
+AUC_vec = AUC_matrix';
+AUC_vec = AUC_vec(:);
+detectable = AUC_vec >= 0.8;   % threshold definition
+tbl = table(S_vec, C_vec, detectable);
+mdl = fitglm(tbl, ...
+   'detectable ~ S_vec + C_vec + S_vec*C_vec', ...
+   'Distribution','binomial');
+disp('--- Logistic Regression Results ---');
+disp(mdl);
+%% =========================
+% Two-way ANOVA
+%% =========================
+[p,tbl_anova,stats] = anovan(AUC_vec, ...
+   {S_vec, C_vec}, ...
+   'model','interaction', ...
+   'varnames',{'Size','Contrast'});
+disp('--- ANOVA Table ---');
+disp(tbl_anova);
