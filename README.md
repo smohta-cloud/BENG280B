@@ -13,6 +13,7 @@ Analysis II: Quantitatively evaluate PET contrast recovery as a function of lesi
 Analysis III: Quantify PSMA tracer uptake for PET/MRI imaging and analyze the interplay of parameters like FWHM, LBR, and noise ratio in lesion detectability.
 
 References:
+
 ​​Sung H, Ferlay J, Siegel RL, Laversanne M, Soerjomataram I, Jemal A, Bray F. Global Cancer Statistics 2020: GLOBOCAN Estimates of Incidence and Mortality Worldwide for 36 Cancers in 185 Countries. CA Cancer J Clin. 2021 May;71(3):209-249. doi: 10.3322/caac.21660. Epub 2021 Feb 4. PMID: 33538338.
 
 Leslie SW, Soon-Sutton TL, Skelton WP. Prostate Cancer. [Updated 2024 Oct 4]. In: StatPearls [Internet]. Treasure Island (FL): StatPearls Publishing; 2025 Jan-. Available from: https://www.ncbi.nlm.nih.gov/books/NBK470550/
