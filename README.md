@@ -44,7 +44,7 @@ The measured lesion-to-background ratio was computed after blurring.
 The contrast recovery coefficient (CRC) was calculated to quantify the extent to which true contrast was preserved.
 Contrast loss due to spatial resolution was quantified using the CRC:
 CRC = (Observed Contrast - 1) / (True Contrast - 1)                                                 –Equation 2
-This framework allows direct evaluation of how lesion size, relative to system resolution, affects contrast recovery under controlled conditions (see Figure 4).
+This framework allows direct evaluation of how lesion size, relative to system resolution, affects contrast recovery under controlled conditions.
 
 Analysis III Workflow: 
 Although the benefits of hybrid PET/MRI have been demonstrated, the limits of detectability are mostly determined by PET physics. Understanding how lesion-detection quantification is affected by lesion size, uptake contrast, and noise is essential, regardless of biological variability. Since PSMA is significantly overexpressed on the membranes of prostate cancer cells, PSMA PET tracers show improved detection compared to other PET tracers, such as choline and fluorodeoxyglucose-18 (F-18). Therefore, the main goal of this experiment was to quantify prostate lesion size as a function of parameters such as noise, resolution, and contrast in a hybrid PSMA PET/MRI scan.
